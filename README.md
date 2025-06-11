@@ -1,6 +1,4 @@
-Here’s a refined, minimal `README.md` tailored to demonstrate your core features and setup:
 
-````markdown
 # TipAutomation
 
 A Java desktop application that calculates tip shares among employees and saves results locally using SQLite.
@@ -36,13 +34,9 @@ The application will open a GUI. Enter employee data, calculate shares, and save
 
 ## Project Structure
 
-```
+
 ├── TipApp.java            # Entry point launching the GUI
 ├── TipCalculatorGUI.java  # Handles UI and business logic
 ├── DBConnection.java      # Manages SQLite database operations
 └── tipAutomation.db       # SQLite DB file (created at first run)
-```
 
----
-
-By following this, you’re demonstrating database connectivity, GUI development, and basic business logic in Java.
