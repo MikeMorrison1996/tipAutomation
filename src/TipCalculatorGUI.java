@@ -1,114 +1,86 @@
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
-import com.mongodb.MongoClient;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
-import org.bson.Document;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.List;
 
 public class TipCalculatorGUI extends JFrame {
-    private JTextField nameField;
-    private JTextField hoursField;
-    private JTextField totalTipsField;
-    private DefaultTableModel tableModel;
-    private List<Double> hoursList;
+    private final JTextField nameField = new JTextField();
+    private final JTextField hoursField = new JTextField();
+    private final JTextField totalTipsField = new JTextField();
+    private final DefaultTableModel tableModel = new DefaultTableModel(new Object[]{"Name","Hours","Share"}, 0);
+    private final List<Double> hoursList = new ArrayList<>();
+    private final DBConnection db = DBConnection.getInstance();
 
     public TipCalculatorGUI() {
-        setTitle("Tip Calculator");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(500, 400);
-        setLocationRelativeTo(null);
-        hoursList = new ArrayList<>();
-        initComponents();
+        super("Tip Calculator (Modern)");
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        initUI();
+        pack();
+        setLocationRelativeTo(null);  // center
     }
 
-    private void initComponents() {
-        JPanel inputPanel = new JPanel(new GridLayout(3, 3, 5, 5));
-        inputPanel.add(new JLabel("Name:"));
-        nameField = new JTextField();
-        inputPanel.add(nameField);
-        JButton addButton = new JButton("Add Person");
-        inputPanel.add(addButton);
+    private void initUI() {
+        // Top input panel
+        JPanel input = new JPanel(new GridLayout(3, 3, 10, 10));
+        input.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+        input.add(new JLabel("Name:"));          input.add(nameField);      input.add(createButton("Add Person", this::onAddPerson));
+        input.add(new JLabel("Hours:"));         input.add(hoursField);     input.add(new JLabel());
+        input.add(new JLabel("Total Tips:"));    input.add(totalTipsField); input.add(createButton("Calculate & Save", this::onCalculate));
+        add(input, BorderLayout.NORTH);
 
-        inputPanel.add(new JLabel("Hours:"));
-        hoursField = new JTextField();
-        inputPanel.add(hoursField);
-        inputPanel.add(new JLabel()); // empty placeholder
-
-        inputPanel.add(new JLabel("Total Tips:"));
-        totalTipsField = new JTextField();
-        inputPanel.add(totalTipsField);
-        JButton calcButton = new JButton("Calculate & Save");
-        inputPanel.add(calcButton);
-
-        tableModel = new DefaultTableModel(new Object[]{"Name", "Hours", "Share"}, 0);
+        // Table area
         JTable table = new JTable(tableModel);
-
-        add(inputPanel, BorderLayout.NORTH);
-        add(new JScrollPane(table), BorderLayout.CENTER);
-
-        addButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String name = nameField.getText();
-                String hoursText = hoursField.getText();
-                if (name.isEmpty() || hoursText.isEmpty()) return;
-                try {
-                    double hours = Double.parseDouble(hoursText);
-                    hoursList.add(hours);
-                    tableModel.addRow(new Object[]{name, hours, ""});
-                    nameField.setText("");
-                    hoursField.setText("");
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(TipCalculatorGUI.this, "Invalid hours");
-                }
-            }
-        });
-
-        calcButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String tipsText = totalTipsField.getText();
-                if (tipsText.isEmpty()) return;
-                try {
-                    double totalTips = Double.parseDouble(tipsText);
-                    double totalHours = hoursList.stream().mapToDouble(Double::doubleValue).sum();
-                    for (int i = 0; i < tableModel.getRowCount(); i++) {
-                        double hours = (double) tableModel.getValueAt(i, 1);
-                        double share = (hours / totalHours) * totalTips;
-                        tableModel.setValueAt(String.format("%.2f", share), i, 2);
-                        saveRecord(tableModel.getValueAt(i, 0).toString(), hours, share, totalTips);
-                    }
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(TipCalculatorGUI.this, "Invalid total tips");
-                }
-            }
-        });
+        table.setRowHeight(24);
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setBorder(BorderFactory.createEmptyBorder(0, 15, 15, 15));
+        add(scroll, BorderLayout.CENTER);
     }
 
-    private void saveRecord(String name, double hours, double share, double totalTips) {
-        try (MongoClient mongoClient = new MongoClient("localhost", 27017)) {
-            MongoDatabase database = mongoClient.getDatabase("TipAutomation");
-            MongoCollection<Document> collection = database.getCollection("tip_records");
-            Document doc = new Document("name", name)
-                    .append("hours", hours)
-                    .append("share", share)
-                    .append("totalTips", totalTips)
-                    .append("timestamp", System.currentTimeMillis());
-            collection.insertOne(doc);
-        } catch (Exception ex) {
-            // handle connection errors gracefully
-            ex.printStackTrace();
+    private JButton createButton(String text, Runnable action) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        btn.setPreferredSize(new Dimension(140, 30));
+        btn.addActionListener(e -> action.run());
+        return btn;
+    }
+
+    private void onAddPerson() {
+        String name = nameField.getText().trim();
+        String hrsText = hoursField.getText().trim();
+        if (name.isEmpty() || hrsText.isEmpty()) return;
+        try {
+            double hrs = Double.parseDouble(hrsText);
+            hoursList.add(hrs);
+            tableModel.addRow(new Object[]{name, hrs, ""});
+            nameField.setText("");
+            hoursField.setText("");
+        } catch (NumberFormatException e) {
+            showError("Invalid hours input.");
         }
     }
 
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            new TipCalculatorGUI().setVisible(true);
-        });
+    private void onCalculate() {
+        String tipsText = totalTipsField.getText().trim();
+        if (tipsText.isEmpty()) return;
+        try {
+            double totalTips = Double.parseDouble(tipsText);
+            double totalHours = hoursList.stream().mapToDouble(Double::doubleValue).sum();
+
+            for (int i = 0; i < tableModel.getRowCount(); i++) {
+                String name = (String) tableModel.getValueAt(i, 0);
+                double hrs = ((Number) tableModel.getValueAt(i, 1)).doubleValue();
+                double share = hrs / totalHours * totalTips;
+                tableModel.setValueAt(String.format("%.2f", share), i, 2);
+                db.save(name, hrs, share, totalTips);
+            }
+            JOptionPane.showMessageDialog(this, "Records saved successfully!");
+        } catch (NumberFormatException e) {
+            showError("Invalid total tips input.");
+        }
+    }
+
+    private void showError(String msg) {
+        JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
     }
 }
